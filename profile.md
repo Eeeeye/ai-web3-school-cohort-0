@@ -2,25 +2,25 @@
 
 ## Background
 
-- **AI Foundation**: Intermediate — familiar with LLM APIs, prompt engineering
-- **Web3 Foundation**: Intermediate — used wallets, sent transactions, familiar with basic concepts
-- **Programming**: Comfortable with scripting (Python/JS), can build small projects
+- **AI Foundation**: Proficient — daily user of multiple AI Agents (Claude Code, Codex CLI, Hermes Agent), familiar with LLM APIs, prompt engineering, Agent architecture, model pricing
+- **Web3 Foundation**: Intermediate — experience with Solidity/Foundry smart contract development, ZetaChain, tokenization, dApp prototyping, crypto trading
+- **Programming**: Independent developer — Python, Java, Rust, Solidity, Go, Node.js, React Native/Expo
 
 ## Goals
 
-- Comprehensive understanding of AI x Web3 intersection
-- Development skills for building AI-powered Web3 applications
-- Product research and market analysis in the AI x Web3 space
-- Complete a Hackathon project
+- Build real AI × Web3 projects for Hackathon deliverables
+- Deepen understanding of Agent × on-chain execution workflow
+- Explore AI Agent integration with wallets, payments, and smart contracts
+- Produce verifiable on-chain proof-of-work
 
 ## Commitment
 
-- **Daily study time**: 3-4 hours
-- **Language**: Chinese with English technical terms
+- **Daily study time**: 2-4 hours
+- **Language**: 中文为主, English for technical terms
 
 ## Focus Areas
 
-- [ ] Week 1: Fill gaps in AI & Web3 basics, complete minimum crossover experiment
-- [ ] Week 2: Deep dive into AI x Web3 intersection topics
-- [ ] Week 3: Hands-on practice and Hackathon preparation
-- [ ] Week 4: Hackathon development and demo
+- [ ] Week 1: Fill Web3 gaps (AA, Session Key, Agent Wallet), complete minimum crossover experiment
+- [ ] Week 2: Dive into AI × Web3 Bridge topics (Chain-aware Context, Web3 Tool Use, Agent Workflow)
+- [ ] Week 3: Hackathon project ideation, tech stack selection, prototype development
+- [ ] Week 4: Hackathon build, demo, and submission
