@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>链上交易生命周期 | On-chain Transaction Lifecycle</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d1117;--surface:#161b22;--border:#30363d;
+  --text:#e6edf3;--text-dim:#8b949e;--text-muted:#484f58;
+  --accent-blue:#58a6ff;--accent-purple:#bc8cff;
+  --accent-green:#3fb950;--accent-orange:#d29922;--accent-red:#f85149;
+  --stage-rpc:#58a6ff;--stage-mempool:#bc8cff;
+  --stage-builder:#d29922;--stage-validator:#3fb950;--stage-finalize:#f85149;
+  --radius:12px;--transition:0.35s cubic-bezier(0.4,0,0.2,1);
+}
+html{font-size:16px;scroll-behavior:smooth}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC",sans-serif;
+  line-height:1.6;min-height:100vh;overflow-x:hidden;
+}
+
+/* ── Background grid ── */
+body::before{
+  content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:
+    radial-gradient(circle at 20% 30%,rgba(88,166,255,0.04) 0%,transparent 50%),
+    radial-gradient(circle at 80% 70%,rgba(188,140,255,0.04) 0%,transparent 50%),
+    linear-gradient(rgba(48,54,61,0.3) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(48,54,61,0.3) 1px,transparent 1px);
+  background-size:100% 100%,100% 100%,60px 60px,60px 60px;
+}
+
+.container{position:relative;z-index:1;max-width:1100px;margin:0 auto;padding:2rem 1.5rem}
+
+/* ── Header ── */
+header{text-align:center;margin-bottom:3rem}
+header h1{
+  font-size:clamp(1.6rem,4vw,2.4rem);font-weight:700;
+  background:linear-gradient(135deg,var(--accent-blue),var(--accent-purple));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text;
+}
+header p{color:var(--text-dim);margin-top:0.5rem;font-size:0.95rem;max-width:600px;margin-inline:auto}
+
+/* ── Play button ── */
+.play-btn{
+  display:inline-flex;align-items:center;gap:0.5rem;
+  margin-top:1.2rem;padding:0.6rem 1.6rem;
+  background:linear-gradient(135deg,var(--accent-blue),var(--accent-purple));
+  color:#fff;border:none;border-radius:99px;font-size:0.9rem;font-weight:600;
+  cursor:pointer;transition:var(--transition);letter-spacing:0.02em;
+}
+.play-btn:hover{transform:translateY(-2px);box-shadow:0 4px 20px rgba(88,166,255,0.3)}
+.play-btn:active{transform:translateY(0)}
+.play-btn svg{width:16px;height:16px;fill:currentColor}
+.play-btn.running{opacity:0.7;pointer-events:none}
+
+/* ── Flow wrapper ── */
+.flow{
+  display:flex;align-items:flex-start;
+  gap:0;position:relative;
+  overflow-x:auto;overflow-y:visible;
+  padding:2rem 0 1rem;
+  -webkit-overflow-scrolling:touch;
+}
+.flow::-webkit-scrollbar{height:4px}
+.flow::-webkit-scrollbar-track{background:var(--surface);border-radius:2px}
+.flow::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+/* ── Stage card ── */
+.stage{
+  flex:1;min-width:180px;max-width:220px;
+  position:relative;cursor:pointer;
+  transition:var(--transition);
+}
+.stage:last-child .connector{display:none}
+
+.stage-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);padding:1.2rem 1rem;
+  transition:var(--transition);position:relative;overflow:hidden;
+}
+.stage-card::before{
+  content:"";position:absolute;top:0;left:0;right:0;height:3px;
+  background:var(--stage-color);opacity:0.6;transition:var(--transition);
+}
+.stage:hover .stage-card,.stage.active .stage-card{
+  border-color:var(--stage-color);
+  box-shadow:0 0 20px color-mix(in srgb,var(--stage-color) 20%,transparent);
+}
+.stage:hover .stage-card::before,.stage.active .stage-card::before{opacity:1}
+
+.stage-number{
+  font-size:0.7rem;font-weight:700;letter-spacing:0.1em;
+  color:var(--stage-color);opacity:0.7;margin-bottom:0.4rem;
+}
+.stage-icon{font-size:1.8rem;margin-bottom:0.4rem}
+.stage-name{font-size:0.85rem;font-weight:700;color:var(--text)}
+.stage-name-en{font-size:0.72rem;color:var(--text-dim);margin-top:0.15rem}
+
+/* Pulse animation */
+.stage.active .stage-card{animation:pulse 1.5s ease-in-out infinite}
+@keyframes pulse{
+  0%,100%{box-shadow:0 0 20px color-mix(in srgb,var(--stage-color) 15%,transparent)}
+  50%{box-shadow:0 0 30px color-mix(in srgb,var(--stage-color) 30%,transparent)}
+}
+
+/* ── Connector arrows ── */
+.connector{
+  flex:0 0 50px;min-width:40px;height:80px;
+  position:relative;display:flex;align-items:center;justify-content:center;
+}
+.connector-line{
+  width:100%;height:2px;
+  background:var(--border);position:relative;overflow:visible;
+}
+.connector-arrow{
+  position:absolute;right:-4px;top:50%;transform:translateY(-50%);
+  width:0;height:0;
+  border-top:5px solid transparent;border-bottom:5px solid transparent;
+  border-left:7px solid var(--border);
+  transition:var(--transition);
+}
+.stage.active .connector .connector-line,
+.stage.active ~ .stage .connector .connector-line{
+  background:var(--stage-color);
+}
+.stage.active .connector .connector-arrow,
+.stage.active ~ .stage .connector .connector-arrow{
+  border-left-color:var(--stage-color);
+}
+
+/* Flowing dots */
+.flow-dot{
+  position:absolute;width:6px;height:6px;border-radius:50%;
+  background:var(--accent-blue);top:-2px;
+  animation:flowRight 1.8s linear infinite;
+  box-shadow:0 0 6px var(--accent-blue);
+}
+.connector:nth-child(4) .flow-dot{animation-delay:0.3s}
+.connector:nth-child(6) .flow-dot{animation-delay:0.6s}
+.connector:nth-child(8) .flow-dot{animation-delay:0.9s}
+@keyframes flowRight{
+  0%{left:-6px;opacity:0}
+  10%{opacity:1}
+  90%{opacity:1}
+  100%{left:calc(100% + 2px);opacity:0}
+}
+
+/* ── Expanded detail panel ── */
+.detail-panel{
+  max-height:0;overflow:hidden;
+  transition:max-height 0.45s cubic-bezier(0.4,0,0.2,1),
+             padding 0.35s ease,opacity 0.35s ease;
+  opacity:0;padding:0 1rem;
+}
+.stage.expanded .detail-panel{
+  max-height:500px;opacity:1;padding:0.8rem 1rem 1rem;
+}
+.detail-panel .divider{
+  height:1px;background:var(--border);margin-bottom:0.8rem;
+}
+.detail-panel p{font-size:0.82rem;color:var(--text-dim);margin-bottom:0.5rem;line-height:1.7}
+.detail-panel .label{color:var(--text);font-weight:600;font-size:0.78rem;display:block;margin-bottom:0.15rem}
+.detail-panel .analogy{
+  background:color-mix(in srgb,var(--stage-color) 8%,var(--surface));
+  border:1px solid color-mix(in srgb,var(--stage-color) 20%,var(--border));
+  border-radius:8px;padding:0.6rem 0.8rem;margin-top:0.5rem;
+}
+.detail-panel .analogy .label{color:var(--stage-color)}
+
+/* ── Did you know ── */
+.facts{
+  margin-top:3rem;background:var(--surface);
+  border:1px solid var(--border);border-radius:var(--radius);
+  padding:1.5rem 1.8rem;
+}
+.facts h2{
+  font-size:1rem;font-weight:700;margin-bottom:1rem;
+  display:flex;align-items:center;gap:0.5rem;
+}
+.facts h2 span{
+  background:linear-gradient(135deg,var(--accent-orange),var(--accent-red));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+.facts-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem}
+.fact{
+  padding:0.8rem 1rem;border-radius:8px;
+  background:color-mix(in srgb,var(--accent-blue) 5%,var(--bg));
+  border:1px solid var(--border);
+  font-size:0.82rem;color:var(--text-dim);line-height:1.7;
+}
+.fact strong{color:var(--text)}
+
+/* ── Footer ── */
+footer{text-align:center;margin-top:3rem;padding:1.5rem 0;color:var(--text-muted);font-size:0.75rem}
+
+/* ── Mobile responsive ── */
+@media(max-width:900px){
+  .flow{flex-direction:column;align-items:stretch;padding:1rem 0}
+  .stage{max-width:100%;min-width:0}
+  .connector{
+    flex:0 0 auto;width:2px;height:36px;min-width:2px;
+    margin-left:calc(50% - 1px);
+  }
+  .connector-line{
+    width:2px !important;height:100% !important;
+  }
+  .connector-arrow{
+    right:50%;top:auto;bottom:-4px;transform:translateX(50%);
+    border-left:5px solid transparent;border-right:5px solid transparent;
+    border-top:7px solid var(--border);border-bottom:none;
+  }
+  .flow-dot{
+    top:auto;left:-2px !important;
+    animation:flowDown 1.8s linear infinite;
+  }
+  @keyframes flowDown{
+    0%{top:-6px;opacity:0}
+    10%{opacity:1}
+    90%{opacity:1}
+    100%{top:calc(100% + 2px);opacity:0}
+  }
+}
+
+@media(max-width:480px){
+  .container{padding:1.2rem 1rem}
+  header h1{font-size:1.4rem}
+  .stage-card{padding:1rem 0.8rem}
+  .stage-icon{font-size:1.5rem}
+  .facts-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>链上交易生命周期</h1>
+    <p>从你点击「确认」到交易不可篡改，一笔交易要经过 5 个关键阶段。点击每个阶段了解详情。</p>
+    <button class="play-btn" id="playBtn" onclick="playAnimation()">
+      <svg viewBox="0 0 16 16"><path d="M3 2.5v11l10-5.5z"/></svg>
+      Play Animation
+    </button>
+  </header>
+
+  <div class="flow" id="flow">
+    <!-- Stage 1: RPC -->
+    <div class="stage" style="--stage-color:var(--stage-rpc)" data-index="0" onclick="toggleStage(this)">
+      <div class="stage-card">
+        <div class="stage-number">STAGE 01</div>
+        <div class="stage-icon">🌉</div>
+        <div class="stage-name">RPC 网关层</div>
+        <div class="stage-name-en">RPC Gateway</div>
+        <div class="detail-panel">
+          <div class="divider"></div>
+          <p><span class="label">发生什么</span>用户在钱包点击确认后，请求通过 RPC 节点提交到链上。RPC 是 Web2 浏览器与 Web3 去中心化节点之间的桥梁。</p>
+          <p><span class="label">Gas 概念</span>Base Fee（基础费）— 会被销毁 🔥；Tip（小费）— 奖励给验证者</p>
+          <div class="analogy">
+            <span class="label">🌍 现实类比</span>
+            <p>像边境口岸的翻译官 — 将浏览器的 HTTP 请求翻译成区块链节点能理解的协议语言。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="connector"><div class="connector-line"><div class="flow-dot"></div></div><div class="connector-arrow"></div></div>
+
+    <!-- Stage 2: Mempool -->
+    <div class="stage" style="--stage-color:var(--stage-mempool)" data-index="1" onclick="toggleStage(this)">
+      <div class="stage-card">
+        <div class="stage-number">STAGE 02</div>
+        <div class="stage-icon">🚕</div>
+        <div class="stage-name">Mempool 内存池</div>
+        <div class="stage-name-en">Mempool</div>
+        <div class="detail-panel">
+          <div class="divider"></div>
+          <p><span class="label">发生什么</span>交易进入「候车室」，所有待处理交易在此排队。Gas 价格越高，越靠前。</p>
+          <p><span class="label">MEV 风险</span>套利机器人 (MEV bots) 在内存池中搜寻获利机会，如三明治攻击、套利交易等。</p>
+          <div class="analogy">
+            <span class="label">🌍 现实类比</span>
+            <p>像出租车排队 — 出价更高的乘客先上车。也像机场安检，所有人都在等，但 VIP 通道更快。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="connector"><div class="connector-line"><div class="flow-dot"></div></div><div class="connector-arrow"></div></div>
+
+    <!-- Stage 3: Builder -->
+    <div class="stage" style="--stage-color:var(--stage-builder)" data-index="2" onclick="toggleStage(this)">
+      <div class="stage-card">
+        <div class="stage-number">STAGE 03</div>
+        <div class="stage-icon">📦</div>
+        <div class="stage-name">Builder 打包者</div>
+        <div class="stage-name-en">Block Builder</div>
+        <div class="detail-panel">
+          <div class="divider"></div>
+          <p><span class="label">发生什么</span>Builder 从内存池中挑选交易，按 Gas 优先级排序并打包成区块。Gas 越高 = 越先被打包。</p>
+          <p><span class="label">PBS 机制</span>Proposer-Builder Separation：构建者竞拍区块空间，提议者选择出价最高的区块。</p>
+          <div class="analogy">
+            <span class="label">🌍 现实类比</span>
+            <p>像快递分拣员 — 按优先级排序包裹，加急件最先装车发运。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="connector"><div class="connector-line"><div class="flow-dot"></div></div><div class="connector-arrow"></div></div>
+
+    <!-- Stage 4: Validator -->
+    <div class="stage" style="--stage-color:var(--stage-validator)" data-index="3" onclick="toggleStage(this)">
+      <div class="stage-card">
+        <div class="stage-number">STAGE 04</div>
+        <div class="stage-icon">⚖️</div>
+        <div class="stage-name">Validator 验证者</div>
+        <div class="stage-name-en">Validator</div>
+        <div class="detail-panel">
+          <div class="divider"></div>
+          <p><span class="label">发生什么</span>质押 ETH 的节点共同见证和验证区块的合法性。发现欺诈行为时，作恶者的质押会被罚没 (Slashing)。</p>
+          <p><span class="label">Slashing</span>验证者如果双签或作恶，将损失部分甚至全部质押的 ETH，这是 PoS 的安全保障。</p>
+          <div class="analogy">
+            <span class="label">🌍 现实类比</span>
+            <p>像陪审团审查证据 — 多人共同验证，作伪证者将受到惩罚（失去保证金）。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="connector"><div class="connector-line"><div class="flow-dot"></div></div><div class="connector-arrow"></div></div>
+
+    <!-- Stage 5: Finalize -->
+    <div class="stage" style="--stage-color:var(--stage-finalize)" data-index="4" onclick="toggleStage(this)">
+      <div class="stage-card">
+        <div class="stage-number">STAGE 05</div>
+        <div class="stage-icon">🔐</div>
+        <div class="stage-name">Finalize 最终确认</div>
+        <div class="stage-name-en">Finality</div>
+        <div class="detail-panel">
+          <div class="divider"></div>
+          <p><span class="label">发生什么</span>区块上链后需等待约 12 分钟（2 个 epoch，Ethereum）才达到最终不可篡改状态。此时链重组 (Reorg) 无法推翻该区块。</p>
+          <p><span class="label">Reorg 保护</span>在最终确认前，区块理论上仍可被重组；确认后则永久写入链史。</p>
+          <div class="analogy">
+            <span class="label">🌍 现实类比</span>
+            <p>像混凝土凝固 — 刚浇筑时还能改变，一旦固化就永远定型。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Did you know -->
+  <section class="facts">
+    <h2>💡 <span>Did you know?</span></h2>
+    <div class="facts-grid">
+      <div class="fact"><strong>以太坊每秒处理约 15-30 笔交易</strong>，而 Visa 约 65,000 TPS。Layer 2 方案（如 Arbitrum、Optimism）正在扩展吞吐量。</div>
+      <div class="fact"><strong>Gas 价格波动巨大</strong>：同一笔交易在不同时段的 Gas 费可能相差 10 倍以上。周末通常更便宜。</div>
+      <div class="fact"><strong>MEV 每年提取数亿美元</strong>：套利机器人通过抢跑 (front-running) 获取利润，Flashbots 等方案试图缓解这一问题。</div>
+      <div class="fact"><strong>比特币最终确认约需 60 分钟</strong>（6 个区块），以太坊约 12 分钟（2 个 epoch）。不同链的最终确认时间差异很大。</div>
+    </div>
+  </section>
+
+  <footer>
+    链上交易生命周期 · On-chain Transaction Lifecycle · AI×Web3 School
+  </footer>
+</div>
+
+<script>
+const stages = document.querySelectorAll('.stage');
+
+function toggleStage(el) {
+  const wasExpanded = el.classList.contains('expanded');
+  stages.forEach(s => s.classList.remove('expanded'));
+  if (!wasExpanded) el.classList.add('expanded');
+}
+
+function setActive(index) {
+  stages.forEach(s => s.classList.remove('active'));
+  if (index >= 0 && index < stages.length) {
+    stages[index].classList.add('active');
+  }
+}
+
+async function playAnimation() {
+  const btn = document.getElementById('playBtn');
+  btn.classList.add('running');
+  stages.forEach(s => { s.classList.remove('expanded'); s.classList.remove('active'); });
+
+  for (let i = 0; i < stages.length; i++) {
+    setActive(i);
+    stages[i].classList.add('expanded');
+    stages[i].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    await delay(2200);
+  }
+  // Keep last stage highlighted briefly
+  await delay(1500);
+  stages.forEach(s => s.classList.remove('active'));
+  btn.classList.remove('running');
+}
+
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Subtle entrance animation on load
+window.addEventListener('DOMContentLoaded', () => {
+  stages.forEach((s, i) => {
+    s.style.opacity = '0';
+    s.style.transform = 'translateY(20px)';
+    setTimeout(() => {
+      s.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+      s.style.opacity = '1';
+      s.style.transform = 'translateY(0)';
+    }, 150 + i * 100);
+  });
+});
+</script>
+</body>
+</html>
